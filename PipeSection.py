@@ -11,10 +11,10 @@ class PipeSection:
         self.initialRateGuess = iRG #initial flow rate guess
 
         #data we need to keep track of for each object for each iteration 
-        self.flowRateHistory = [] #list of the iterated values of flow rate
         self.headLossHistory = [] #list of the iterated values of head loss
         self.qHistory = [] #list of the iterated values of Q (each time we calculate a dQ, we add that dQ and add a new item to the list)
         self.qHistory.append(iRG) #adds the initial flow rate guess as the first iterated value of Q
+        self.dQ = 0.0
 
         #calculate and define the constant k from the data given
         self.kConst = (8*fF*sL)/(9.81*pow(math.pi,2)*pow(d,5))
@@ -30,9 +30,6 @@ class PipeSection:
     def getKConst(self):
         return self.kConst
 
-    def getQHistory(self):
-        return self.qHistory
-
     def getName(self):
         return self.name
     
@@ -47,3 +44,30 @@ class PipeSection:
         
     def getRecentQVal(self):
         return self.qHistory[len(self.qHistory)-1]
+    
+    def getRecentHLVal(self):
+        return self.headLossHistory[len(self.headLossHistory)-1]
+    
+    def getFrictionFactor(self):
+        return self.frictionFactor
+    
+    def getLength(self):
+        return self.sectionLength
+    
+    def getDiameter(self):
+        return self.diameter
+    
+    def getInitialRateGuess(self):
+        return self.initialRateGuess
+    
+    def getFullHeadLossHistory(self):
+        return self.headLossHistory
+    
+    def getFullQHistory(self):
+        return self.qHistory
+    
+    def getDQ(self):
+        return self.dQ
+
+    def setDQ(self,num):
+        self.dQ = num

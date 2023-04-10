@@ -48,19 +48,10 @@ def inOutFlowDataFromFile():
     #close the file
     file.close()
 
-def debug_printPipeSectionsList():
-    for p in pipeSections:
-        p.printData()
-        print("")
-    for p in pipeInOutSections:
-        p.printData()
-        print("")
-
 #main method; executed upon run
 def main():
     intermediateFlowDataFromFile()
     inOutFlowDataFromFile()
-    debug_printPipeSectionsList() #only here for debugging purposes
     HardyCross.hardyCrossCalc(pipeSections, pipeInOutSections)
 
 #main method call

@@ -1,0 +1,60 @@
+LOOP #1:
+Name: AB | Friction Factor: 0.0223 | Section Length: 150.0 | Pipe Diameter: 0.225 | Initial Flow Rate Guess 0.2
+	QHistory: [0.2, 0.16104627516327846, 0.16241545836521623, 0.1624171541124944]
+	Head Loss History: [19.171882432038217, 12.43100195440253, 12.643272256402536]
+	Flow Rate History: []
+Name: BE | Friction Factor: 0.0175 | Section Length: 125.0 | Pipe Diameter: 0.2 | Initial Flow Rate Guess -0.1
+	QHistory: [-0.1, -0.13895372483672155, -0.13758454163478379, -0.1375828458875056]
+	Head Loss History: [-5.648320316452953, -10.905854613876809, -10.691991386727794]
+	Flow Rate History: []
+Name: EI | Friction Factor: 0.0223 | Section Length: 125.0 | Pipe Diameter: 0.225 | Initial Flow Rate Guess 0.0
+	QHistory: [0.0, -0.038953724836721555, -0.03758454163478379, -0.0375828458875056]
+	Head Loss History: [0.0, -0.6060682091335322, -0.5642116326712655]
+	Flow Rate History: []
+Name: IH | Friction Factor: 0.0218 | Section Length: 150.0 | Pipe Diameter: 0.3 | Initial Flow Rate Guess -0.2
+	QHistory: [-0.2, -0.23895372483672156, -0.2375845416347838, -0.2375828458875056]
+	Head Loss History: [-4.447569103641714, -6.348780654089306, -6.276233220067369]
+	Flow Rate History: []
+Name: HA | Friction Factor: 0.0218 | Section Length: 250.0 | Pipe Diameter: 0.3 | Initial Flow Rate Guess 0.2
+	QHistory: [0.2, 0.16104627516327846, 0.16241545836521623, 0.1624171541124944]
+	Head Loss History: [7.41261517273619, 4.806321654963389, 4.888393828465615]
+	Flow Rate History: []
+
+LOOP #2:
+Name: BC | Friction Factor: 0.0223 | Section Length: 75.0 | Pipe Diameter: 0.225 | Initial Flow Rate Guess 0.1
+	QHistory: [0.1]
+	Head Loss History: []
+	Flow Rate History: []
+Name: CF | Friction Factor: 0.0175 | Section Length: 125.0 | Pipe Diameter: 0.2 | Initial Flow Rate Guess 0.0
+	QHistory: [0.0]
+	Head Loss History: []
+	Flow Rate History: []
+Name: FE | Friction Factor: 0.0188 | Section Length: 75.0 | Pipe Diameter: 0.15 | Initial Flow Rate Guess 0.0
+	QHistory: [0.0]
+	Head Loss History: []
+	Flow Rate History: []
+
+LOOP #3:
+Name: CD | Friction Factor: 0.0223 | Section Length: 75.0 | Pipe Diameter: 0.225 | Initial Flow Rate Guess 0.1
+	QHistory: [0.1]
+	Head Loss History: []
+	Flow Rate History: []
+Name: DG | Friction Factor: 0.0175 | Section Length: 125.0 | Pipe Diameter: 0.2 | Initial Flow Rate Guess 0.0
+	QHistory: [0.0]
+	Head Loss History: []
+	Flow Rate History: []
+Name: GF | Friction Factor: 0.0188 | Section Length: 75.0 | Pipe Diameter: 0.15 | Initial Flow Rate Guess 0.2
+	QHistory: [0.2]
+	Head Loss History: []
+	Flow Rate History: []
+
+LOOP #4:
+Name: GJ | Friction Factor: 0.0233 | Section Length: 125.0 | Pipe Diameter: 0.225 | Initial Flow Rate Guess -0.2
+	QHistory: [-0.2]
+	Head Loss History: []
+	Flow Rate History: []
+Name: JI | Friction Factor: 0.0218 | Section Length: 150.0 | Pipe Diameter: 0.3 | Initial Flow Rate Guess -0.2
+	QHistory: [-0.2]
+	Head Loss History: []
+	Flow Rate History: []
+
