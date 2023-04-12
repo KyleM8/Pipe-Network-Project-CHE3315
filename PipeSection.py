@@ -16,6 +16,7 @@ class PipeSection:
         self.qHistory = [float(0.0)] #list of the iterated values of Q (each time we calculate a dQ, we add that dQ and add a new item to the list)
         self.qHistory.append(float(iRG)) #adds the initial flow rate guess as the first iterated value of Q
         self.dQHistory = [float(0.0)]
+        self.massBalCorrectionHistory = [float(0.0)]
 
         #calculate and define the constant k from the data given
         self.kConst = (8*fF*sL)/(9.81*pow(math.pi,2)*pow(d,5))
@@ -47,7 +48,7 @@ class PipeSection:
 
     def appendQHistory(self,num):
         self.qHistory.append(num)
-        
+    
     def getRecentQVal(self):
         return self.qHistory[len(self.qHistory)-1]
     
@@ -86,3 +87,12 @@ class PipeSection:
 
     def setReversed(self, r):
         self.reversed = r
+    
+    def appendMassBalCorrectionHistory(self,num):
+        self.massBalCorrectionHistory.append(num)
+    
+    def getRecentMassBalCorrection(self):
+        return self.massBalCorrectionHistory[len(self.massBalCorrectionHistory)-1]
+    
+    def getMassBalCorrectionHistory(self):
+        return self.massBalCorrectionHistory
