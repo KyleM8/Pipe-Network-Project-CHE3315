@@ -1,6 +1,6 @@
 # Pipe-Network-Project-CHE3315
 
-ESSENTIAL FILES (files that you must have in the same folder to run):
+ESSENTIAL FILES (files that are required to be in the same folder to run):
 main.py
 PipePoint.py
 PipeSection.py
