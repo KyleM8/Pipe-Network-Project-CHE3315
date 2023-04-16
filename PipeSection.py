@@ -26,34 +26,15 @@ class PipeSection:
         #indicates to other methods if the PipeSection in question is being viewed as flowing forwards or backwards
         self.reversed = False
 
-    def printData(self):
-        print("name: " + self.pipePoints[0].getName() + self.pipePoints[1].getName())
-        print("friction factor: " + str(self.frictionFactor))
-        print("section length: " + str(self.sectionLength))
-        print("diameter: " + str(self.diameter))
-        print("initial rate guess: " + str(self.initialRateGuess))
-        print("kConst: " + str(self.kConst))
-    
+    #identifying information
+    def getName(self):
+        return self.pipePoints[0].getName() + self.pipePoints[1].getName()
+
     def getKConst(self):
         return self.kConst
 
     def getPipePoints(self):
         return self.pipePoints
-    
-    def appendFlowRateHistory(self,num):
-        self.flowRateHistory.append(num)
-
-    def appendHeadLossHistory(self,num):
-        self.headLossHistory.append(num)
-
-    def appendQHistory(self,num):
-        self.qHistory.append(num)
-    
-    def getRecentQVal(self):
-        return self.qHistory[len(self.qHistory)-1]
-    
-    def getRecentHLVal(self):
-        return self.headLossHistory[len(self.headLossHistory)-1]
     
     def getFrictionFactor(self):
         return self.frictionFactor
@@ -66,33 +47,65 @@ class PipeSection:
     
     def getInitialRateGuess(self):
         return self.initialRateGuess
-    
+
+    #data arrays
+    def appendHeadLossHistory(self,num):
+        self.headLossHistory.append(num)
+
     def getFullHeadLossHistory(self):
         return self.headLossHistory
+
+    def getRecentHLVal(self):
+        return self.headLossHistory[len(self.headLossHistory)-1]
     
+    def appendQHistory(self,num):
+        self.qHistory.append(num)
+
     def getFullQHistory(self):
         return self.qHistory
-    
-    def getRecentDQ(self):
-        return self.dQ[len(self.dQ)-1]
+
+    def getRecentQVal(self):
+        return self.qHistory[len(self.qHistory)-1]
 
     def appendDQHistory(self,num):
         self.dQHistory.append(num)
-    
+
     def getDQHistory(self):
         return self.dQHistory
-    
-    def getReversed(self):
-        return self.reversed
 
-    def setReversed(self, r):
-        self.reversed = r
-    
+    def getRecentDQ(self):
+        return self.dQHistory[len(self.dQHistory)-1]
+
     def appendMassBalCorrectionHistory(self,num):
         self.massBalCorrectionHistory.append(num)
-    
-    def getRecentMassBalCorrection(self):
-        return self.massBalCorrectionHistory[len(self.massBalCorrectionHistory)-1]
-    
+
     def getMassBalCorrectionHistory(self):
         return self.massBalCorrectionHistory
+
+    def getRecentMassBalCorrection(self):
+        return self.massBalCorrectionHistory[len(self.massBalCorrectionHistory)-1]
+
+    #array culling methods
+    def cullHLArr(self):
+        num = len(self.headLossHistory)
+        while num >= 10:
+            self.headLossHistory.pop(0)
+            num = len(self.headLossHistory)
+
+    def cullQArr(self):
+        num = len(self.qHistory)
+        while num >= 10:
+            self.qHistory.pop(0)
+            num = len(self.qHistory)
+
+    def cullDQArr(self):
+        num = len(self.dQHistory)
+        while num >= 10:
+            self.dQHistory.pop(0)
+            num = len(self.dQHistory)
+
+    def cullMassBalCorrArr(self):
+        num = len(self.massBalCorrectionHistory)
+        while num >= 10:
+            self.massBalCorrectionHistory.pop(0)
+            num = len(self.massBalCorrectionHistory)

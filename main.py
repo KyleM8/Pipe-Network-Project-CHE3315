@@ -1,7 +1,9 @@
 #-------------------------------------IMPORT STATEMENTS AND GLOBAL VARIABLE DECLARATION---------------------------------
 import time
+import numpy as np
+import platform
 from PipeSection import * #imports custom PipeSection class
-from PipePoint import * #imports custom PipeInOutSection class
+from PipePoint import * #imports custom PipePoint class
 
 #high level variables
 allPipeSections = [] #list of PipeSection objects where we will track all changes to variables
@@ -10,7 +12,14 @@ allPipePoints = [] #list of PipeInOutSection objects that keep track of all flow
 #variables for recording execute time
 startTime = time.time()
 
-#------------------------------------------VARIABLE INITIALIZATION AND DATA READING FROM FILE---------------------------------------
+#variable for iteration limit
+#before an active culling system for the arrays was implemented, the code would terminate with exit code -1 somewhere between 2000 and 5000 iterations because the arrays became too much for the memory to handle (at least on my 8GB RAM laptop)
+#before this system was implemented, using Task Manager showed that each iteration required about 3MB of RAM, which points to this process being absurdly inefficient (was not expecting to need this many iterations when writing the code this way, and kept having to add more RAM-heavy arrays and variables)
+#if we did actually need every single value of the array for some reason, the efficiency issue could be fixed by writing the arrays into working .json files instead and just keeping a record of the index we're working with (can much more easily and efficiently store a long integer in RAM rather than an array of a few thousand elements)
+#however, as a simple fix to the efficiency issue, the array culling system is more than enough optimization, since with this many iterations, the most recent value is really the only one needed
+outerIterationLimit = 10
+
+#---------------------------------------VARIABLE INITIALIZATION AND DATA READING FROM FILE---------------------------------------
 #initially creates the array of objects from the data in the initial data csv file
 def createAllPipeSections():
     file = open("PIPESECTION_FLOW_DATA_IN.csv", "r")
@@ -60,6 +69,73 @@ def createPipePoints():
     #close the file
     file.close()
 
+#----------------------------------OUTPUT FILE WRITING----------------------------------------------
+#output of each loop and information associated with each pipe section in the loop
+def writeLoopInfo(file, loopsArr):
+    file.write("\nFLOW LOOPS:\n\n")
+    loopNum = 1
+    for loop in loopsArr:
+        file.write("Loop #" + str(loopNum) + ":\n")
+        sumHL = 0.0
+        for section in loop:
+            for sectionObj in allPipeSections:
+                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                    currentSectionObj = sectionObj
+            file.write("Section Name (with direction as originally inputted): " + currentSectionObj.getName() + " | Friction Factor: " + str(currentSectionObj.getFrictionFactor()) + " | Section Length: " + str(currentSectionObj.getLength()) + " | Pipe Diameter: " + str(currentSectionObj.getDiameter()) + " | Initial Flow Rate Guess " + str(currentSectionObj.getInitialRateGuess()))
+            # file.write("\n\tQHistory: ")
+            # file.write(str(currentSectionObj.getFullQHistory()))
+            file.write("\n\tFinal flow rate: " + str(currentSectionObj.getRecentQVal()))
+            # file.write("\n\tHead Loss History: ")
+            # file.write(str(currentSectionObj.getFullHeadLossHistory()))
+            file.write("\n\tLast head loss value: " + str(currentSectionObj.getRecentHLVal()))
+            sumHL += currentSectionObj.getRecentHLVal()
+            # file.write("\n\tdQ History: ")
+            # file.write(str(currentSectionObj.getDQHistory()))
+            file.write("\n\tLast dQ value: " + str(currentSectionObj.getRecentDQ()))
+            # file.write("\n\tMass Balance Correction History: ")
+            # file.write(str(currentSectionObj.getMassBalCorrectionHistory()))
+            file.write("\n\tLast mass balance correction value: " + str(currentSectionObj.getRecentMassBalCorrection()))
+            file.write("\n")
+        file.write("Total head loss value for loop: " + str(sumHL) + "\n")
+        loopNum += 1
+        file.write("\n")
+
+#writes a section at the end of the file on the mass balances for each Qin or Qout
+def writeMassBalanceInfo(file):
+    file.write("\n\nINPUT/OUTPUT FLOWS / MASS BALANCE:\n")
+    for pipePoint in allPipePoints:
+        flowSum = 0.0
+        flowSumList = []
+        for pipeSection in allPipeSections:
+            if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                flowSumList.append((pipeSection.getRecentQVal()))
+            elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                flowSumList.append(((-1.0)*pipeSection.getRecentQVal()))
+        for num in flowSumList:
+            flowSum += num
+        file.write("Expected flow in or out of system at PipePoint " + pipePoint.getName() + ": " + str(pipePoint.getFlow()) + "\nActual calculated flow in or out: " + str(flowSumList) + " = " + str(flowSum) + "\n\n")
+
+#creates a .txt log file and outputs all relevant data to it, given the object array of the network with all the data stored in the PipeSection objects
+def writeFinalDataToFile(loopsArr, outerCounter):
+    create = True
+    n = 1
+    while create:
+        try:
+            file = open("DATALOG_OUTPUT_" + str(n) + ".txt", "x")
+            create = False
+        except: n += 1 
+    file.write("Units are in m and m^3/s.\n\n")
+    writeLoopInfo(file, loopsArr)
+    writeMassBalanceInfo(file)
+    file.write("\n\nFINAL FLOW NUMBERS:\n")
+    for sectionObj in allPipeSections:
+        file.write("Q for section " + sectionObj.getName() + ": " + str(sectionObj.getRecentQVal()) + "\n")
+    file.write("\n\nLimited to " + str(outerIterationLimit) + " outer iterations. Outer iterations run: " + str(outerCounter) + ". Inner iterations may vary.")
+    file.write("\nHardware info: OS: " + platform.system() + " | CPU: " + platform.processor())
+    endTime = time.time()
+    file.write("\nProgram time to execute: " + str(endTime-startTime) + " sec = " + str((endTime-startTime)/60.0) + " mins") #str(((endTime - startTime)*10**3)) + " ms"
+    file.close()
+
 #-------------------------------------ALL CALCULATION METHODS-----------------------------------------
 #calculates head loss given a PipeSection object
 def headLossCalc(p):
@@ -87,22 +163,21 @@ def calcMassBalCorrections():
     dict = {}
     for pipePoint in allPipePoints:
         flowSum = 0.0
-        if not (pipePoint.getFlow() == 0.0):
-            for pipeSection in allPipeSections:
-                if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
-                    flowSum += pipeSection.getRecentQVal()
-                elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
-                    flowSum += ((-1.0)*pipeSection.getRecentQVal())
-            #check if the flowSum agrees with the correct flows
-            diff = pipePoint.getFlow() - flowSum
-            correction = 0.0
-            if abs(diff) > 0.0001:
-                if diff > 0.0:
-                    correction = math.sqrt(diff)
-                elif diff < 0.0:
-                    correction = (-1)*math.pow(((-1)*diff),(10/6)) #only works if the numbers we're dealing with are decimals
-            else: correction = 0.0
-            dict[pipePoint.getName()] = correction
+        for pipeSection in allPipeSections:
+            if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                flowSum += pipeSection.getRecentQVal()
+            elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                flowSum += ((-1.0)*pipeSection.getRecentQVal())
+        #check if the flowSum agrees with the correct flows
+        diff = pipePoint.getFlow() - flowSum
+        correction = 0.0
+        if (abs(diff) > 0.000001):
+            if diff > 0.0:
+                correction = np.power(diff,(2)) #only works if the numbers we're dealing with are decimals
+            elif diff < 0.0:
+                correction = (-1)*np.power(abs(diff),(2)) #only works if the numbers we're dealing with are decimals
+        else: correction = 0.0
+        dict[pipePoint.getName()] = correction
     return dict
 
 #defines each flow loop and direction of each flow loop by using the names of each pipe section; returns a 2D array [flow loop][names of pipe sections inside that flow loop]
@@ -111,67 +186,44 @@ def loopDefine():
     loopsArr = [["AB","BE","EI","IH","HA"], ["BC","CF","FE","BE"], ["CD","DG","GF","FC"], ["GJ","JI","IE","EF","FG"]]
     return loopsArr
 
-#output of each loop and all information associated with each pipe section in the loop
-def writeLoopInfo(file, loopsArr):
-    file.write("\nFLOW LOOPS:\n\n")
-    loopNum = 1
-    for loop in loopsArr:
-        file.write("Loop #" + str(loopNum) + ":\n")
-        for section in loop:
-            for sectionObj in allPipeSections:
-                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
-                    currentSectionObj = sectionObj
-            file.write("Section Name (with direction as originally inputted): " + currentSectionObj.getPipePoints()[0].getName() + currentSectionObj.getPipePoints()[1].getName() + " | Friction Factor: " + str(currentSectionObj.getFrictionFactor()) + " | Section Length: " + str(currentSectionObj.getLength()) + " | Pipe Diameter: " + str(currentSectionObj.getDiameter()) + " | Initial Flow Rate Guess " + str(currentSectionObj.getInitialRateGuess()))
-            file.write("\n\tFinal flow rate: " + str(currentSectionObj.getRecentQVal()))
-            file.write("\n\tQHistory: ")
-            file.write(str(currentSectionObj.getFullQHistory()))
-            file.write("\n\tHead Loss History: ")
-            file.write(str(currentSectionObj.getFullHeadLossHistory()))
-            file.write("\n\tdQ History: ")
-            file.write(str(currentSectionObj.getDQHistory()))
-            file.write("\n\tMass Balance Correction History: ")
-            file.write(str(currentSectionObj.getMassBalCorrectionHistory()))
-            file.write("\n")
-        loopNum += 1
-        file.write("\n")
-
-#writes a section at the end of the file on the mass balances for each Qin or Qout
-def writeMassBalanceInfo(file):
-    file.write("\n\nINPUT/OUTPUT FLOWS / MASS BALANCE:\n")
+#check if the expected flow rates are calculated correctly by cross-checking with the given mass balance information; returns true if flows are correct, returns false if more calculation is necessary
+def massBalanceValid():
+    boolList = []
     for pipePoint in allPipePoints:
         flowSum = 0.0
-        flowSumList = []
-        if not (pipePoint.getFlow() == 0.0):
-            for pipeSection in allPipeSections:
-                if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
-                    flowSumList.append((pipeSection.getRecentQVal()))
-                elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
-                    flowSumList.append(((-1.0)*pipeSection.getRecentQVal()))
-        for num in flowSumList:
-            flowSum += num
-        file.write("Expected flow in or out of system at PipePoint " + pipePoint.getName() + ": " + str(pipePoint.getFlow()) + "\nActual calculated flow in or out: " + str(flowSumList) + " = " + str(flowSum) + "\n\n")
+        for pipeSection in allPipeSections:
+            if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                flowSum += pipeSection.getRecentQVal()
+            elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                flowSum += ((-1.0)*pipeSection.getRecentQVal())
+        #check if the flowSum agrees with the correct flows
+        diff = abs(pipePoint.getFlow()) - abs(flowSum)
+        if (abs(diff) < 0.001):
+            boolList.append(True) #adds a true value if the flows match the mass balance, false if the flows do not match the mass balance
+        else: boolList.append(False)
+    #print(boolList)
+    for bool in boolList:
+        if bool == False:
+            return False
+    return True
 
-#creates a .txt log file and outputs all relevant data to it, given the object array of the network with all the data stored in the PipeSection objects
-def writeFinalDataToFile(loopsArr, counter):
-    create = True
-    n = 1
-    while create:
-        try:
-            file = open("DATALOG_OUTPUT_" + str(n) + ".txt", "x")
-            create = False
-        except: n += 1 
-    file.write("Units are in m and m^3/s.\n\n")
-    writeLoopInfo(file, loopsArr)
-    writeMassBalanceInfo(file)
-    file.write("\n\nIterations to converge within limits: " + str(counter) + "\nNote: more iterations are possible to obtain more precision, and tolerances are changeable depending on the precision required. For this project statement, the current precision is more than acceptable.")
-    endTime = time.time()
-    file.write("\nProgram time to execute: " + str(((endTime - startTime)*10**3)) + " ms") #NEED A PROGRAM TIME NUMBER!!
-    file.close()
+#culls arrays to ensure that the calculation is possible (thousands of iterations of adding to an array is a huge waste of resources and slows down the process quite a bit)
+def cullArrays():
+    for section in allPipeSections: #cull arrays for Q history, head loss history, dQ history, mass balance correction history
+        hLArr = section.getFullHeadLossHistory()
+        qArr = section.getFullQHistory()
+        dQArr = section.getDQHistory()
+        massBalArr = section.getMassBalCorrectionHistory()
+        if len(hLArr) > 10: section.cullHLArr()
+        if len(qArr) > 10: section.cullQArr()
+        if len(dQArr) > 10: section.cullDQArr()
+        if len(massBalArr) > 10: section.cullMassBalCorrArr()
 
 #overall logic for when to stop calculating the number
+#criteria to return false: abs(sumHL) for each loop is < 0.01; abs(dQ) for each pipe section is < 0.001; abs() of mass balance correction is < 0.001 for each pipe section, and the given mass balances are valid
+#(currently a little redundant, as it seems to never return false even though the numbers converge to reasonable values; this is why we have an iteration limit implemented)
 def stillCalculating(loopsArr, counter):
     if (counter < 4): return True
-    #criteria to return false: abs(sumHL) for each loop is < 0.01; abs(dQ) for each pipe section is < 0.001; abs() of mass balance correction is < 0.001 for each pipe section
     sumHL = 0.0
     for loop in loopsArr:
         sumHL = 0.0
@@ -186,66 +238,92 @@ def stillCalculating(loopsArr, counter):
                 if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
                     dQ = sectionObj.getRecentQVal()
                     mBCorr = sectionObj.getRecentMassBalCorrection()
-                    if ((abs(dQ) > 0.001) and (abs(mBCorr) > 0.00001)): return True
+                    if ((abs(dQ) > 0.001) and (abs(mBCorr) > 0.0001)): return True
+    if massBalanceValid() == False: return True 
     return False
 
-#main method call for this class; all method calls within this class will come from this method
+#returns true if all sums of head losses for each loop are convergent, returns false otherwise
+def checkAllSumHL(loopsArr):
+    for loop in loopsArr:
+        sumHL = 0.0
+        for section in loop:
+            for sectionObj in allPipeSections:
+                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                    sumHL += sectionObj.getRecentHLVal()
+        if abs(sumHL) > 0.01: return False
+    return True
+
+#returns true if all dQ values for every pipe section are convergent, returns false otherwise
+def checkAllDQ(loopsArr):
+    for loop in loopsArr:
+        for section in loop:
+            for sectionObj in allPipeSections:
+                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                    if abs(sectionObj.getRecentQVal()) > 0.001: return False
+    return True
+
+#main method call for the calculation implementation; all method calls for calculation come from this method
 def hardyCrossCalc():
     #define pipe network (the arrangement of flow loops)
     loopsArr = loopDefine()
     counter = 1
     while stillCalculating(loopsArr, counter):
-        #this for loop iterates over each loop
-        for loop in loopsArr:
-            #variables for while loop
-            hL = 1.0
-            dQ = 1.0
-            sumHL = 1.0
-            #while loop iterates over the loop and solves only the loop
-            while ((abs(sumHL) > 0.01) or (abs(dQ) > 0.001)):
-                sumHL = 0.0
-                for section in loop:
-                    #figure out which PipeSection object we're considering here
-                    for sectionObj in allPipeSections:
-                        if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
-                            #if statement determines if we're looking at the forward or backward orientation of the section (if the first PipePoint object matches the last letter of the section string, then it's reversed)
-                            if (sectionObj.getPipePoints()[0].getName() == section[1:2]):
-                                sectionObj.setReversed(True)
-                            else: sectionObj.setReversed(False)
-                            #calculates the head loss for the section and adds it to the headLossHistory array for that PipeSection object
-                            hL = headLossCalc(sectionObj)
-                            sectionObj.appendHeadLossHistory(hL)
-                            sumHL += hL
-                #calculates the dQ for the loop and adds it to the dQHistory array for each PipeSection object in the loop
-                dQ = dQCalc(loop)
-                for section in loop:
-                    for sectionObj in allPipeSections:
-                        if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
-                            newQVal = (sectionObj.getRecentQVal() + dQ)
-                            sectionObj.appendQHistory(newQVal)
-                            sectionObj.appendDQHistory(dQ)
-        #calculates an additional correction based on known mass balance values and applies it
-        massBalDict = calcMassBalCorrections()
-        for pipePoint in allPipePoints:
-            if (pipePoint.getName() in massBalDict):
+        #calculates additional corrections based on given mass balance values and applies the corrections to the pipe sections 
+        innerCounter1 = 1
+        while (not massBalanceValid()) or innerCounter1 == 1:
+            massBalDict = calcMassBalCorrections()
+            for pipePoint in allPipePoints:
                 correction = massBalDict.get(pipePoint.getName())
                 for sectionObj in allPipeSections:
-                    if (pipePoint.getName() == sectionObj.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                    if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
                         newQVal = (sectionObj.getRecentQVal() + correction)
                         sectionObj.appendQHistory(newQVal)
                         sectionObj.appendMassBalCorrectionHistory(correction)
-                    elif (pipePoint.getName() == sectionObj.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                        #print("applying mbal correction " + str(correction) + " to " + sectionObj.getName())
+                    if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
                         newQVal = (sectionObj.getRecentQVal() + ((-1)*correction))
                         sectionObj.appendQHistory(newQVal)
                         sectionObj.appendMassBalCorrectionHistory(((-1)*correction))
+                        #print("applying mbal correction " + str(correction) + " to " + sectionObj.getName())
+            innerCounter1 += 1
+        #this loop ensures that we iterate over the entire flow loop and solve it correctly before moving on to the next "outer" iteration
+        innerCounter2 = 1
+        while (not checkAllSumHL(loopsArr) and not checkAllDQ(loopsArr)) or innerCounter2 == 1:
+            for loop in loopsArr:
+                hL = 1.0
+                dQ = 1.0
+                sumHL = 1.0
+                #while loop keeps iterating over the loop and solves only the loop
+                while ((abs(sumHL) > 0.01) or (abs(dQ) > 0.001)):
+                    #calculates dQ for the loop and applies it
+                    dQ = dQCalc(loop)
+                    for section in loop:
+                            for sectionObj in allPipeSections:
+                                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                                    newQVal = (sectionObj.getRecentQVal() + dQ)
+                                    sectionObj.appendQHistory(newQVal)
+                                    sectionObj.appendDQHistory(dQ)
+                    #calculates the head loss for each element in the loop and calculates sum of the head losses for the loop
+                    sumHL = 0.0
+                    for section in loop:
+                        #figure out which PipeSection object we're considering here
+                        for sectionObj in allPipeSections:
+                            if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                                #calculates the head loss for the section and adds it to the headLossHistory array for that PipeSection object
+                                hL = headLossCalc(sectionObj)
+                                sectionObj.appendHeadLossHistory(hL)
+                                sumHL += hL
+            innerCounter2 += 1
+        print("OUTER ITERATION: " + str(counter))
+        if counter >= outerIterationLimit: break
         counter += 1
+        cullArrays()
     #when all loops are finished, the loop converges, so we can output the convergence values of hL and dQ
     writeFinalDataToFile(loopsArr, counter)
 
 #-------------MAIN METHOD AND TIMING----------------
 #main method; executed upon run
 def main():
-    startTime = time.time()
     createPipePoints()
     createAllPipeSections()
     hardyCrossCalc()
