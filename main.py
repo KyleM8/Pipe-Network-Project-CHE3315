@@ -17,7 +17,8 @@ startTime = time.time()
 #before this system was implemented, using Task Manager showed that each iteration required about 3MB of RAM, which points to this process being absurdly inefficient (was not expecting to need this many iterations when writing the code this way, and kept having to add more RAM-heavy arrays and variables)
 #if we did actually need every single value of the array for some reason, the efficiency issue could be fixed by writing the arrays into working .json files instead and just keeping a record of the index we're working with (can much more easily and efficiently store a long integer in RAM rather than an array of a few thousand elements)
 #however, as a simple fix to the efficiency issue, the array culling system is more than enough optimization, since with this many iterations, the most recent value is really the only one needed
-outerIterationLimit = 10
+outerIterationLimit = 1000
+innerIterationLimit = 1000
 
 #---------------------------------------VARIABLE INITIALIZATION AND DATA READING FROM FILE---------------------------------------
 #initially creates the array of objects from the data in the initial data csv file
@@ -116,7 +117,7 @@ def writeMassBalanceInfo(file):
         file.write("Expected flow in or out of system at PipePoint " + pipePoint.getName() + ": " + str(pipePoint.getFlow()) + "\nActual calculated flow in or out: " + str(flowSumList) + " = " + str(flowSum) + "\n\n")
 
 #creates a .txt log file and outputs all relevant data to it, given the object array of the network with all the data stored in the PipeSection objects
-def writeFinalDataToFile(loopsArr, outerCounter):
+def writeFinalDataToFile(loopsArr, outerCounter, innerCounter):
     create = True
     n = 1
     while create:
@@ -130,7 +131,7 @@ def writeFinalDataToFile(loopsArr, outerCounter):
     file.write("\n\nFINAL FLOW NUMBERS:\n")
     for sectionObj in allPipeSections:
         file.write("Q for section " + sectionObj.getName() + ": " + str(sectionObj.getRecentQVal()) + "\n")
-    file.write("\n\nLimited to " + str(outerIterationLimit) + " outer iterations. Outer iterations run: " + str(outerCounter) + ". Inner iterations may vary.")
+    file.write("\n\nLimited to " + str(outerIterationLimit) + " outer iterations. Outer iterations run: " + str(outerCounter) + ".\nLimited to " + str(innerIterationLimit) + " inner iterations. Inner iterations run: " + str(innerCounter) + ".")
     file.write("\nHardware info: OS: " + platform.system() + " | CPU: " + platform.processor())
     endTime = time.time()
     file.write("\nProgram time to execute: " + str(endTime-startTime) + " sec = " + str((endTime-startTime)/60.0) + " mins") #str(((endTime - startTime)*10**3)) + " ms"
@@ -262,47 +263,74 @@ def checkAllDQ(loopsArr):
                     if abs(sectionObj.getRecentQVal()) > 0.001: return False
     return True
 
+#given an array of names of sections in a loop and a pipeSection object, return if the pipe section is in the loop
+def inLoop(loop, pipeSection):
+    for string in loop:
+        if pipeSection.getName() == string: return True
+    return False
+
+#prints bass balance info for debug purposes
+def debug_printMassBals():
+    for pipePoint in allPipePoints:
+        flowSum = 0.0
+        flowSumList = []
+        for pipeSection in allPipeSections:
+            if (pipePoint.getName() == pipeSection.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                flowSumList.append((pipeSection.getRecentQVal()))
+            elif (pipePoint.getName() == pipeSection.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                flowSumList.append(((-1.0)*pipeSection.getRecentQVal()))
+        for num in flowSumList:
+            flowSum += num
+        print("Expected flow in or out of system at PipePoint " + pipePoint.getName() + ": " + str(pipePoint.getFlow()) + "\nActual calculated flow in or out: " + str(flowSumList) + " = " + str(flowSum) + "\n\n")
+
 #main method call for the calculation implementation; all method calls for calculation come from this method
 def hardyCrossCalc():
     #define pipe network (the arrangement of flow loops)
     loopsArr = loopDefine()
     counter = 1
     while stillCalculating(loopsArr, counter):
-        #calculates additional corrections based on given mass balance values and applies the corrections to the pipe sections 
-        innerCounter1 = 1
-        while (not massBalanceValid()) or innerCounter1 == 1:
-            massBalDict = calcMassBalCorrections()
-            for pipePoint in allPipePoints:
-                correction = massBalDict.get(pipePoint.getName())
-                for sectionObj in allPipeSections:
-                    if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
-                        newQVal = (sectionObj.getRecentQVal() + correction)
-                        sectionObj.appendQHistory(newQVal)
-                        sectionObj.appendMassBalCorrectionHistory(correction)
-                        #print("applying mbal correction " + str(correction) + " to " + sectionObj.getName())
-                    if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
-                        newQVal = (sectionObj.getRecentQVal() + ((-1)*correction))
-                        sectionObj.appendQHistory(newQVal)
-                        sectionObj.appendMassBalCorrectionHistory(((-1)*correction))
-                        #print("applying mbal correction " + str(correction) + " to " + sectionObj.getName())
-            innerCounter1 += 1
+
         #this loop ensures that we iterate over the entire flow loop and solve it correctly before moving on to the next "outer" iteration
         innerCounter2 = 1
-        while (not checkAllSumHL(loopsArr) and not checkAllDQ(loopsArr)) or innerCounter2 == 1:
+        while (not checkAllSumHL(loopsArr) and not checkAllDQ(loopsArr) and not massBalanceValid()) or innerCounter2 == 1:
+
             for loop in loopsArr:
-                hL = 1.0
+                hL = 0.0
                 dQ = 1.0
                 sumHL = 1.0
                 #while loop keeps iterating over the loop and solves only the loop
                 while ((abs(sumHL) > 0.01) or (abs(dQ) > 0.001)):
-                    #calculates dQ for the loop and applies it
-                    dQ = dQCalc(loop)
                     for section in loop:
-                            for sectionObj in allPipeSections:
-                                if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
-                                    newQVal = (sectionObj.getRecentQVal() + dQ)
-                                    sectionObj.appendQHistory(newQVal)
-                                    sectionObj.appendDQHistory(dQ)
+                        for sectionObj in allPipeSections:
+                            dQ = dQCalc(loop) #calculates dQ for the loop
+                            #applies dQ
+                            if (sectionObj.getPipePoints()[0].getName() in section) and (sectionObj.getPipePoints()[1].getName() in section):
+                                newQVal = (sectionObj.getRecentQVal() + dQ)
+                                sectionObj.appendQHistory(newQVal)
+                                sectionObj.appendDQHistory(dQ)
+                                print("applying dQ of " + str(dQ) + " to " + sectionObj.getName() + " for new Q of " + str(newQVal))
+
+                                massBalDict = calcMassBalCorrections() #calculates mass balance corrections
+                                #applies mass bal correction
+                                for pipePoint in sectionObj.getPipePoints():
+                                    correction = massBalDict.get(pipePoint.getName())
+                                    numSections = 0
+                                    for sectionObj in allPipeSections:
+                                        if pipePoint.getName() in sectionObj.getName(): numSections += 1
+                                    correction = correction/numSections
+                                    for sectionObj in allPipeSections:
+                                        if (pipePoint.getName() in sectionObj.getName()) and inLoop(loop, sectionObj):
+                                            if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[0].getName()): #this means that the PipeSection object starts at the point we're looking at (we don't need to do anything to Q to get the correct flow rate to calculate mass balance)
+                                                newQVal = (sectionObj.getRecentQVal() + correction)
+                                                sectionObj.appendQHistory(newQVal)
+                                                sectionObj.appendMassBalCorrectionHistory(correction)
+                                                print("applying mbal correction " + str(correction) + " to " + sectionObj.getName()  + " for new Q value of " + str(newQVal))
+                                            if not (correction == 0.0) and (pipePoint.getName() == sectionObj.getPipePoints()[1].getName()): #this means that the PipeSection object ends at the point we're looking at (we need to do Q*-1 to get the correct flow rate sign) 
+                                                newQVal = (sectionObj.getRecentQVal() + ((-1)*correction))
+                                                sectionObj.appendQHistory(newQVal)
+                                                sectionObj.appendMassBalCorrectionHistory(((-1)*correction))
+                                                print("applying mbal correction " + str(correction) + " to " + sectionObj.getName() + " for new Q value of " + str(newQVal))
+
                     #calculates the head loss for each element in the loop and calculates sum of the head losses for the loop
                     sumHL = 0.0
                     for section in loop:
@@ -313,13 +341,27 @@ def hardyCrossCalc():
                                 hL = headLossCalc(sectionObj)
                                 sectionObj.appendHeadLossHistory(hL)
                                 sumHL += hL
+                    print("sumHL for loop " + str(loop) + " is " + str(sumHL))
             innerCounter2 += 1
+            
+            cullArrays()
+            debug_printMassBals()
+            print("INNER ITERATION: " + str(innerCounter2))
+            # if (innerCounter1 >= innerIterationLimit): break
+            # innerCounter1 += 1
+            # #time.sleep(1)
+            input("Waiting for keypress...")
+            
+        cullArrays()
+        debug_printMassBals()
         print("OUTER ITERATION: " + str(counter))
         if counter >= outerIterationLimit: break
         counter += 1
-        cullArrays()
+        #time.sleep(1)
+        #input("Waiting for keypress...")
+        
     #when all loops are finished, the loop converges, so we can output the convergence values of hL and dQ
-    writeFinalDataToFile(loopsArr, counter)
+    writeFinalDataToFile(loopsArr, counter, innerCounter2)
 
 #-------------MAIN METHOD AND TIMING----------------
 #main method; executed upon run
